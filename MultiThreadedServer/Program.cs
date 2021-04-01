@@ -1250,10 +1250,7 @@ namespace Server
             }
         }
 
-        private static string CreateMessage(string id, string date, string read, string username, string message)
-        {
-            return $"{id}|{date}|{read}|{username}|{message}{{endl}}";
-        }
+        private static string CreateMessage(string id, string date, string read, string username, string message) => $"{id}|{date}|{read}|{username}|{message}{{endl}}";
         static string GetLastOrNewMessage(string s, string r)
         {
             SQLiteCommand c = new SQLiteCommand();

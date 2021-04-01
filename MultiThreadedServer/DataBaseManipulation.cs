@@ -26,16 +26,23 @@ namespace MultiThreadedServer
                 if (r.HasRows)
                 {
                     int columns = r.FieldCount;
-                    int rows = r.StepCount;
+                    table = new SqlResultTable(columns, 0);
 
-                    table = new SqlResultTable(columns, rows);
+                    string[] columnValues = new string[columns];
 
-                    int i = 0;
                     while (r.Read())
                     {
-                        for (int j = 0; j < columns; j++)
+                        try
                         {
-                            table[i++][j] = r[j].ToString();
+                            for (int j = 0; j < columns; j++)
+                            {
+                                columnValues[j] = r[j].ToString();
+                            }
+                            table.AddRow(new Row(columnValues));
+                        }
+                        catch(Exception e)
+                        {
+                            Console.WriteLine(e.Message);
                         }
                     }
                 }

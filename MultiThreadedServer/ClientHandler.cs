@@ -55,15 +55,21 @@ namespace MultiThreadedServer
                 {
                     switch (type)
                     {
-                        case "[LOG]": _break = !Login(); break;
-                        
+                        case "[LOG]":               _break = !Login(); break;
+                        case "[GET_FRIEND_LIST]":   GetFriendsList(); break;
+                        case "[REG]":               Register(); break;
+                        case "[SEND]":              Send(); break;
+                        case "[GET_DIALOG]":        GetDialog();  break;
+                        case "[GET_DIALOG_LIST]":   GetDialogList();  break;
+
                         default:
                             CWLColor("---", ConsoleColor.Red);
                             break;
                     }
                 }
-                catch
+                catch (Exception e)
                 {
+                    CWLColor(e.Message, ConsoleColor.Red);
                     break;
                 }
             }
@@ -190,6 +196,248 @@ namespace MultiThreadedServer
                 CWLColor($"[Server-Query] {type}: User {id}({key}) do not have any friends.", ConsoleColor.Cyan);
             }
         }
+        private bool Register()
+        {
+            SqlResultTable table;
+            string type;
+            string username;
+            string salt;
+            string hash;
+            string email;
+
+            type = "[REG]";
+
+            username = GetData(true);
+            hash = GetData(true);
+            salt = GetData(true);
+            email = GetData(false);
+
+            Console.WriteLine($"[Server-Query] {type}: Login-{username}");
+            Console.WriteLine($"[Server-Query] {type}: Email-{email}");
+
+            table = db.ExecuteQuery($"SELECT Login FROM Users WHERE lower(Login)='{username.ToLower()}'");
+            
+            // Если пользователь с данным логином существует {304}
+            if (table.HasRows)
+            {
+                SendData("{304}");
+                CWLColor($"[Server-Query] {type}: This Login is already taken!", ConsoleColor.Cyan);
+            }
+            // Если логин свободен
+            else
+            {
+                table = db.ExecuteQuery($"SELECT Email FROM Users WHERE lower(Email)='{email.ToLower()}'");
+                // Если почта занята {305}
+                if (table.HasRows)
+                {
+                    SendData("{305}");
+                    CWLColor($"[Server-Query] {type}: This email is already taken!", ConsoleColor.Cyan);
+                }
+                // Если почта не занятна {100}
+                else
+                {
+                    db.ExecuteQuery($"INSERT INTO Users(Login, Password, Salt, Email) VALUES('{username}', '{hash}', '{salt}', '{email}')");
+                    SendData("{100}");
+                    CWLColor($"[Server-Query] {type}: Succes registration -> {username}, {hash}::{salt}, {email}", ConsoleColor.Cyan);
+                    return true;
+                }
+            }
+            return false;
+        }
+        private void Send()
+        {
+            SqlResultTable table;
+            string type;
+            string username;
+            string key;
+            string message;
+            string senderId;
+            string receiverId;
+
+            type = "[SEND]";
+
+            key = GetData(true); // кто отправляет
+            username = GetData(true); // кому отправлять
+            message = GetData(false); // сообщение
+
+            Console.WriteLine($"[Server-Query] {type}: Login-{username}({key})");
+            Console.WriteLine($"[Server-Query] {type}: Sending message-{message}");
+
+            senderId = GetIdByKey(key);
+            if (senderId != null)
+            {
+                receiverId = GetIdByLogin(username);
+                if (receiverId != null)
+                {
+                    // отправить сообщение {101}
+                    db.ExecuteQuery($"INSERT INTO Messages(Message) VALUES('{message}')");
+
+                    db.ExecuteQuery($"INSERT INTO Communications(SenderID, ReceiverID, MessageID) VALUES('{senderId}', '{receiverId}', (SELECT max(ID) FROM Messages))");
+
+                    db.ExecuteQuery($"INSERT INTO DeliveringMessages(Key, CommunicationID, UserID) VALUES('{key}', (SELECT max(ID) FROM Communications), '{receiverId}')");
+
+                    table = db.ExecuteQuery($"SELECT max(ID) FROM Messages");
+                    int id;
+                    if (table.HasRows)
+                    {
+                        id = Convert.ToInt32(table[0][0]);
+                    }
+                    else
+                        throw new Exception("[SEND]: EXCEPTION -> QUERY ERROR...");
+
+                    SendData("{101}" + id);
+                    CWLColor($"[Server-Query] {type}: Message sent from {senderId} to {receiverId}", ConsoleColor.Cyan);
+                }
+                // получатель не найден {306}
+                else
+                {
+                    message = "Receiver is not founded!";
+                    SendData("{306}");
+                    CWLColor($"[Server-Query] {type}: {message}", ConsoleColor.Cyan);
+                }
+            }
+            //  ключ недействителеный {303}
+            else
+            {
+                CWLColor($"[Server-Query] {type}: {message}. Login-{username}. Wrong key-{key}", ConsoleColor.Cyan);
+                message = "Key is not valid";
+                SendData("{303}");
+            }
+        }
+        private void GetDialog()
+        {
+            SqlResultTable table;
+            string type;
+            string username;
+            string key;
+            string senderId;
+            string receiverId;
+            string message;
+
+            type = "[GET_DIALOG]";
+
+            key = GetData(true); // кто запрашивает
+            username = GetData(false); // второй участник диалога
+
+            senderId = GetIdByLogin(username);
+            // Пользователь-отправитель существует
+            if (senderId != null)
+            {
+                receiverId = GetIdByKey(key);
+                if (receiverId != null)
+                {
+                    // Получить сообщения диалога
+                    table = db.ExecuteQuery($"SELECT M.ID, M.Date, M.Read, U.Login, M.Message FROM Communications C " +
+                                            $"JOIN Messages M ON " +
+                                            $"(C.SenderID={senderId} AND C.ReceiverID={receiverId} OR C.SenderID={receiverId} AND C.ReceiverID={senderId}) AND C.MessageID=M.ID " +
+                                            $"JOIN Users U ON " +
+                                            $"U.ID = C.SenderID;");
+                    // Если сообщения есть {101}
+                    if (table.HasRows)
+                    {
+                        string id;
+                        string date;
+                        string isRead; // значения: 1/0
+                        string data = null;
+                        int count = 0;
+
+                        for (int i = 0; i < table.CountRows; i++)
+                        {
+
+                            id = table[i][0];
+                            date = table[i][1].ToString();
+                            isRead = Convert.ToInt32(table[i][2]) == 1 ? "1" : "0";
+                            username = table[i][3].ToString();
+                            message = table[i][4].ToString();
+
+                            data += CreateMessage(id, date, isRead, username, message);
+
+                            count++;
+                        }
+
+                        SendData("{101}" + data);
+                        CWLColor($"[Server-Query] {type}: Pulled {count} message(s) for users {senderId}-{receiverId}", ConsoleColor.Cyan);
+                    }
+                    // Сообщений нет {100}
+                    else
+                    {
+                        SendData("{100}");
+                        CWLColor($"[Server-Query] {type}: Users {senderId}-{receiverId} do not have messages", ConsoleColor.Cyan);
+                    }
+                }
+                //  Ключ недействителен {303}
+                else
+                {
+                    message = "Key is not valid";
+                    CWLColor($"[Server-Query] {type}: {message}. UserID-{receiverId}. Wrong key-{key}", ConsoleColor.Cyan);
+                    SendData("{303}");
+                }
+            }
+            // Пользователь-отправитель не существует {511}
+            else
+            {
+                message = "Sender is not founded";
+                CWLColor($"[Server-Query] {type}: {message}", ConsoleColor.Cyan);
+                SendData("{511}");
+            }
+        }
+        private void GetDialogList()
+        {
+            SqlResultTable table;
+            string type;
+            string key;
+            string lastMessage;
+            string userId;
+
+            type = "[GET_DIALOG_LIST]";
+
+            key = GetData(false); // кто запрашивает
+
+            userId = GetIdByKey(key);
+            // Пользователь найден. Ключ существует
+            if (userId != null)
+            {
+                // получить Id и Username второго участника диалога
+                table = db.ExecuteQuery($"SELECT DISTINCT U.ID, U.Login FROM Users U " +
+                                        $"JOIN Communications C " +
+                                        $"ON (C.SenderID={userId} AND U.ID=C.ReceiverID) " +
+                                        $"OR (C.ReceiverID={userId} AND U.ID = C.SenderID)");
+
+                // Найден минимум один диалог {101}
+                if (table.HasRows)
+                {
+                    string data = "";
+                    string secondUserId;
+                    string secondUserUsername;
+
+                    int count = 0;
+                    for (int i = 0; i < table.CountRows; i++)
+                    {
+                        secondUserId = table[i][0];
+                        secondUserUsername = table[i][1];
+
+                        lastMessage = GetLastOrNewMessage(userId, secondUserId);
+
+                        data += (lastMessage == "{NDA}" ? "{NDA}" : (lastMessage + "{sprt}")) + secondUserUsername + "\n";
+                        count++;
+                    }
+                    SendData("{101}" + data);
+                    CWLColor($"[Server-Query] {type}: Founed {count} chat(s) for user id-{userId} ({key})", ConsoleColor.Cyan);
+                }
+                // Диалогов нет {100}
+                else
+                {
+                    SendData("{100}");
+                    CWLColor($"[Server-Query] {type}: User {userId}({key}) do not have any dialogs", ConsoleColor.Cyan);
+                }
+            }
+            //  Ключ не действителен {303}
+            else
+            {
+                CWLColor($"[Server-Query] {type}: Key is not valid. UserID-{userId}. Wrong key {key}", ConsoleColor.Cyan);
+                SendData("{303}");
+            }
+        }
 
         #endregion
 
@@ -285,10 +533,38 @@ namespace MultiThreadedServer
                 return table[0][0].ToString(); ;
             }
             else
-            {
                 return null;
+        }
+        private string GetIdByLogin(string Login)
+        {
+            SqlResultTable table = db.ExecuteQuery($"SELECT id FROM Users WHERE lower(Login)='{Login.ToLower()}'");
+            if (table.HasRows)
+            {
+                return table[0][0].ToString();
+            }
+            else
+                return null;
+        }
+        private static string CreateMessage(string id, string date, string read, string username, string message) => $"{id}|{date}|{read}|{username}|{message}{{endl}}";
+        private string GetLastOrNewMessage(string s, string r)
+        { // s - sender / r - receiver
+            SqlResultTable table = db.ExecuteQuery($"SELECT U.ID, U.Login, M.Message, M.Read FROM Messages M " +
+                            $"JOIN Communications C ON " +
+                            $"C.SenderID IN({r},{s}) AND C.ReceiverID IN({s},{r}) AND C.MessageID=M.ID " +
+                            $"JOIN Users U ON " +
+                            $"U.ID = C.SenderID " +
+                            $"ORDER BY M.ID DESC LIMIT 1");
+
+            if (table.HasRows)
+            {
+                return table[0][2];
+            }
+            else
+            {
+                return "(?)";
             }
         }
+
         #endregion
     }
 }
