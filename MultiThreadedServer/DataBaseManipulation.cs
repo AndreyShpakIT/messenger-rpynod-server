@@ -63,7 +63,7 @@ namespace MultiThreadedServer
             if (!File.Exists(DbFileName))
             {
                 SQLiteConnection.CreateFile(DbFileName);
-                Console.WriteLine($"[Method] Connect(): File \"{DbFileName}\" was created.");
+                // Console.WriteLine($"[Method] Connect(): File \"{DbFileName}\" was created.");
             }
 
             try
@@ -75,7 +75,7 @@ namespace MultiThreadedServer
 
                     dbCommand.Connection = dbConnector;
 
-                    Console.WriteLine($"[Method] Connect(): Database \"{DbFileName}\" connected.");
+                    //Console.WriteLine($"[Method] Connect(): Database \"{DbFileName}\" connected.");
                 }
                 else
                 {
@@ -91,7 +91,10 @@ namespace MultiThreadedServer
         }
         public void Disconnect()
         {
-            
+            dbCommand.Dispose();
+            dbCommand = null;
+            dbConnector.Dispose();
+            dbConnector = null;
         }
     }
 
