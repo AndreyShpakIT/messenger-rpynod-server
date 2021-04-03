@@ -336,7 +336,7 @@ namespace MultiThreadedServer
             //  ключ недействителеный {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 message = "Key is not valid";
                 SendData("{303}");
             }
@@ -405,7 +405,7 @@ namespace MultiThreadedServer
                 //  Ключ недействителен {303}
                 else
                 {
-                    AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                    AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                     SendData("{303}");
                 }
             }
@@ -476,10 +476,10 @@ namespace MultiThreadedServer
                     AConsole.Print($"Нет диалогов", clientInfo, type, MessageColor);
                 }
             }
-            //  Ключ не действителен {303}
+            //  Ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
@@ -556,7 +556,7 @@ namespace MultiThreadedServer
                 // ключ недействителен {303}
                 else
                 {
-                    AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                    AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                     SendData("{303}");
                 }
             }
@@ -697,10 +697,10 @@ namespace MultiThreadedServer
                     AConsole.Print($"Пользователь '{username}' не найден", clientInfo, type, ErrorColor);
                 }
             }
-            // ключ не действителен {303}
+            // ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
@@ -753,10 +753,10 @@ namespace MultiThreadedServer
                     AConsole.Print($"Пользователь '{username}' не найден", clientInfo, type, ErrorColor);
                 }
             }
-            // ключ не действителен {303}
+            // ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
@@ -805,10 +805,10 @@ namespace MultiThreadedServer
                     AConsole.Print($"Пользователь '{username}' не найден", clientInfo, type, MessageColor);
                 }
             }
-            // ключ не действителен {303}
+            // ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{212}");
             }
         }
@@ -859,10 +859,10 @@ namespace MultiThreadedServer
                     AConsole.Print($"Пользователь '{username}' не найден", clientInfo, type, MessageColor);
                 }
             }
-            // ключ не действителен {303}
+            // ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
@@ -926,7 +926,7 @@ namespace MultiThreadedServer
             // ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
@@ -973,10 +973,10 @@ namespace MultiThreadedServer
                     AConsole.Print("Неверный пароль", clientInfo, type, MessageColor);
                 }
             }
-            // Ключ недействительный  {303}
+            // ключ недействительный  {303}
             else
             {
-                AConsole.Print("Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
@@ -1028,7 +1028,7 @@ namespace MultiThreadedServer
             // ключ недействителен {303}
             else
             {
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
+                AConsole.Print($"Ключ недействительный: {key}", clientInfo, type, ErrorColor);
                 SendData("{303}");
             }
         }
