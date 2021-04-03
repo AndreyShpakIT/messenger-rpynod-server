@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Net;
+using System.Net.Mail;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
@@ -13,8 +15,11 @@ namespace MultiThreadedServer
         private NetworkStream networkStream;
         private DataBaseManipulation db;
         private Client clientInfo;
-        //private bool showData = false;
+        private ResetingClient resetingClientInfo;
         
+
+        //private bool showData = false;
+
         private ConsoleColor MessageColor = ConsoleColor.Cyan;
         private ConsoleColor ErrorColor = ConsoleColor.Red;
 
@@ -55,13 +60,14 @@ namespace MultiThreadedServer
             {
                 type = GetData(true);
 
+                if (string.IsNullOrEmpty(type))
+                {
+                    Thread.Sleep(100);
+                    continue;
+                }
+
                 if (type == "{EXCEPTION}")
                     break;
-
-                //if (firstIteration && type != "[LOG]" && type != "[REG]")
-                //{
-                //    AConsole.Print("Клиент переподключен", clientInfo, type, MessageColor);
-                //}
 
                 try
                 {
@@ -71,20 +77,22 @@ namespace MultiThreadedServer
                         case "[GET_FRIEND_LIST]":   GetFriendsList(); break;
                         case "[REG]":               _break = !Register(); break;
                         case "[SEND]":              Send(); break;
-                        case "[GET_DIALOG]":        GetDialog();  break;
-                        case "[GET_DIALOG_LIST]":   GetDialogList();  break;
-                        case "[SEND_REQ]":          SendRequest();  break;
-                        case "[GET_INC_REQ]":       GetIncomingRequests();  break;
-                        case "[GET_OUT_REQ]":       GetOutgoingRequests();  break;
+                        case "[GET_DIALOG]":        GetDialog(); break;
+                        case "[GET_DIALOG_LIST]":   GetDialogList(); break;
+                        case "[SEND_REQ]":          SendRequest(); break;
+                        case "[GET_INC_REQ]":       GetIncomingRequests(); break;
+                        case "[GET_OUT_REQ]":       GetOutgoingRequests(); break;
                         case "[ACCEPT_REQ]":        AcceptRequest(); break;
                         case "[DENY_ICN_REQ]":      DenyIncomingRequest(); break;
                         case "[CANCEL_OUT_REQ]":    CancelOutgoingRequest(); break;
                         case "[DELETE_FRIEND]":     DeleteFriend(); break;
                         case "[NEW_MSG]":           CheckNewMessages(); break;
-                        case "[CHANGE]":            ChangePassword(); break;
+                        case "[CHANGE_PASSWORD]":   ChangePassword(); break;
                         case "[USER_EXISTS]":       UserExists(); break;
                         case "[READ_MESSAGE]":      ReadMessage(); break;
-
+                        case "[CREATE_RCODE]":      _break = !CreateResetCode(); break;
+                        case "[CHECK_RESETING]":    _break = !CheckReseting(); break;
+                        case "[RESET_PASSWORD]":    _break = !ResetPassword(); break;
                         default:
                             if (!string.IsNullOrEmpty(type))
                                 AConsole.Print("Не распознанный запрос", clientInfo, type, ErrorColor);
@@ -139,7 +147,7 @@ namespace MultiThreadedServer
                 SendData("{101}" + salt);
                 hash = GetData(false);
 
-                table = db.ExecuteQuery($"SELECT ID FROM Users WHERE Password='{hash}'");
+                table = db.ExecuteQuery($"SELECT ID FROM Users WHERE Password='{hash}' AND Login='{username}'");
                 // пароль верный
                 if (table.HasRows)
                 {
@@ -248,7 +256,7 @@ namespace MultiThreadedServer
             Console.WriteLine($"[Server-Query] {type}: Email-{email}");
 
             table = db.ExecuteQuery($"SELECT Login FROM Users WHERE lower(Login)='{username.ToLower()}'");
-            
+
             // Если пользователь с данным логином существует {304}
             if (table.HasRows)
             {
@@ -452,7 +460,7 @@ namespace MultiThreadedServer
                         // 1) username|message\n
                         // 2) username|{NDA}\n
                         dialog = secondUserUsername + "|" + lastMessage + "\n";
-                        
+
                         //CWLColor($"[Server-Query] {type}: {dialog}", ConsoleColor.Cyan);
 
                         data += dialog;
@@ -924,33 +932,52 @@ namespace MultiThreadedServer
         }
         private void ChangePassword()
         {
+            SqlResultTable table;
             string type;
             string key;
             string salt;
             string hash;
-            string userId;
+            //string userId;
+            string newHash;
 
-            type = "[CHANGE]";
+            type = "[CHANGE_PASSWORD]";
 
-            key = GetData(true);
-            hash = GetData(true);
-            salt = GetData(false);
+            key = GetData(false);
 
-            userId = GetIdByKey(key);
-            // ключ действительный
-            if (userId != null)
+            table = db.ExecuteQuery($"SELECT Salt FROM Users WHERE Key='{key}'");
+            // если пользователь имеется в БД, вытянуть соль
+            if (table.HasRows)
             {
-                db.ExecuteQuery($"UPDATE Users SET Password='{hash}' WHERE Key={key}");
-                db.ExecuteQuery($"UPDATE Users SET Salt='{salt}' WHERE Key={key}");
-                
-                SendData("{100}");
-                AConsole.Print($"Пароль изменен успешно", clientInfo, type, MessageColor);
+                salt = table[0][0];
+
+                SendData("{101}" + salt);
+                string message = GetData(false);
+
+                hash = message.Substring(0, message.IndexOf('|'));
+                newHash = message.Substring(message.IndexOf('|') + 1);
+
+                table = db.ExecuteQuery($"SELECT ID FROM Users WHERE Password='{hash}' AND Key='{key}'");
+                // пароль верный
+                if (table.HasRows)
+                {
+                    db.ExecuteQuery($"UPDATE Users SET Password='{newHash}' WHERE Key={key}");
+                    //db.ExecuteQuery($"UPDATE Users SET Salt='{salt}' WHERE Key={key}");
+
+                    SendData("{100}");
+                    AConsole.Print($"Пароль изменен успешно", clientInfo, type, ConsoleColor.DarkYellow);
+                }
+                // пароль не верный {312}
+                else
+                {
+                    SendData("{312}");
+                    AConsole.Print("Неверный пароль", clientInfo, type, MessageColor);
+                }
             }
-            // ключ недействительный
+            // Ключ недействительный  {303}
             else
             {
+                AConsole.Print("Ключ недействительный", clientInfo, type, ErrorColor);
                 SendData("{303}");
-                AConsole.Print($"Ключ недействительный", clientInfo, type, ErrorColor);
             }
         }
         private void UserExists()
@@ -1005,6 +1032,122 @@ namespace MultiThreadedServer
                 SendData("{303}");
             }
         }
+        private bool CreateResetCode()
+        {
+            SqlResultTable table;
+            string type;
+            string email;
+            string code;
+            string userId;
+            string username;
+
+            type = "[CREATE_RCODE]";
+            email = GetData(false);
+
+            resetingClientInfo = new ResetingClient();
+
+            table = db.ExecuteQuery($"SELECT id FROM Users WHERE Email='{email}'");
+            // Почта найдена в БД
+            if (table.HasRows)
+            {
+                userId = table[0][0];
+                username = GetLoginById(userId);
+
+                code = new Random().Next(100000, 1000000).ToString();
+
+                resetingClientInfo = new ResetingClient(username, email, userId, code);
+
+                // Отправка кода {100}
+                if (SendMailMessage(email, username, code))
+                {
+                    AConsole.Print($"Код восстановления успешно отправлен на адрес '{email}'", type, ConsoleColor.DarkCyan);
+                    SendData("{100}");
+
+                    return true;
+                }
+                // Код не отправлен {314}
+                else
+                {
+                    AConsole.Print($"Не удалось отправить код восстановления на адрес '{email}'", type, ErrorColor);
+                    SendData("{314}");
+                }
+            }
+            // Почта не найдена в БД {313]
+            else
+            {
+                AConsole.Print($"Почта '{email}' не найдена", clientInfo, type, MessageColor);
+                SendData("{313}");
+            }
+            return false;
+        }
+        private bool CheckReseting()
+        {
+            string type;
+            string code;
+            string reseting;
+
+            type = "[CHECK_RESETING]";
+            reseting = resetingClientInfo.Email + resetingClientInfo.Code;
+
+            code = GetData(false);
+
+            if (resetingClientInfo.Email == null)
+            {
+                SendData("{317}");
+                return false;
+            }
+
+            // Код верный, восстановить пароль
+            if (resetingClientInfo.Email + code == reseting)
+            {
+                AConsole.Print($"Код восстановления '{resetingClientInfo.Email + code}' введен верно", type, ConsoleColor.DarkCyan);
+                SendData("{100}");
+            }
+            // Код неверный {315}
+            else
+            {
+                AConsole.Print($"Код восстановления '{resetingClientInfo.Email + code}' не соответствует {reseting}", type, MessageColor);
+                SendData("{315}");
+            }
+            return true;
+        }
+        private bool ResetPassword()
+        {
+            string type;
+            string hashANDSalt;
+            string hash;
+            string salt;
+
+            type = "[RESET_PASSWORD]";
+            hashANDSalt = GetData(false);
+
+            if (string.IsNullOrEmpty(resetingClientInfo.Email))
+            {
+                AConsole.Print($"Изменить пароль невозможно, т.к. сессия была прервана", type, ConsoleColor.DarkYellow);
+                SendData("{317}");
+                return false;
+            }
+
+            hash = hashANDSalt.Substring(0, hashANDSalt.IndexOf('|'));
+            salt = hashANDSalt.Substring(hashANDSalt.IndexOf('|') + 1);
+
+            db.ExecuteQuery($"UPDATE Users SET Password='{hash}', Salt='{salt}' WHERE Email='{resetingClientInfo.Email}'");
+            // Пароль восстановлен
+            if (db.CountHandledRows > 0)
+            {
+                AConsole.Print($"Пароль изменен успешно", type, ConsoleColor.DarkYellow);
+                SendData("{100}");
+            }
+            // Пароль не восстановлен
+            else
+            {
+                AConsole.Print($"Не удалось восстановить пароль", type, ErrorColor);
+                SendData("{316}");
+                return true;
+            }
+
+            return false;
+        }
 
         #endregion
 
@@ -1014,7 +1157,7 @@ namespace MultiThreadedServer
             try
             {
                 byte[] buff = new byte[255];
-                networkStream.Read(buff, 0, buff.Length);
+                int r = networkStream.Read(buff, 0, buff.Length);
 
                 string data = GetString(buff);
 
@@ -1030,22 +1173,10 @@ namespace MultiThreadedServer
 
                 return data;
             }
-            catch (ArgumentNullException e)
-            {
-               // Console.WriteLine(e.Message);
-            }
-            catch (System.IO.IOException e)
-            {
-               // Console.WriteLine(e.Message);
-            }
-            catch (ObjectDisposedException e)
-            {
-               // Console.WriteLine(e.Message);
-            }
-            catch (ArgumentOutOfRangeException e)
-            {
-               // Console.WriteLine(e.Message);
-            }
+            catch (ArgumentNullException) { }
+            catch (IOException) { }
+            catch (ObjectDisposedException) { }
+            catch (ArgumentOutOfRangeException) { }
             catch { }
             return "{EXCEPTION}";
         }
@@ -1149,7 +1280,44 @@ namespace MultiThreadedServer
                 return "(?)";
             }
         }
+        public bool SendMailMessage(string to_mail, string username, string code)
+        {
+            try
+            {
+                // отправитель - устанавливаем адрес и отображаемое в письме имя
+                MailAddress from = new MailAddress("rpynodhelp@gmail.com", "RPYNOD");
+                // кому отправляем
+                MailAddress to = new MailAddress(to_mail);
+                // создаем объект сообщения
+                MailMessage m = new MailMessage(from, to);
+                // тема письма
+                m.Subject = "Восстановление пароля";
+                // текст письма
+                m.Body = "<div style=\"background-color: black; height: 450px; padding: 10;\">" +
+                             "<h1 style=\"color: lightgray; text-align: center; font-family: Arial, Helvetica, sans-serif;\">Поддержка RPYNOD</h1>" +
+                             "<hr size=\"3\" color=\"lightgray\">" +
+                             $"<p style=\"color: lightgray; font-family: Arial, Helvetica, sans-serif; margin-left: 30px; text-align: left;\">Здравствуйте, {username}</p>" +
+                             "<p style=\"color: lightgray; font-family: Arial, Helvetica, sans-serif; margin-left: 30px; text-align: center;\">Код для восстановления пароля:</p>" +
+                             $"<p style=\"text-align: center; font-family: Arial, Helvetica, sans-serif; margin-left: 30px; color: blueviolet; font-size: 50pt;\">{code}</p>" +
+                         "</div>";
+                // письмо представляет код html
+                m.IsBodyHtml = true;
+                // адрес smtp-сервера и порт, с которого будем отправлять письмо
+                SmtpClient smtp = new SmtpClient("smtp.gmail.com", 587);
+                // логин и пароль
+                smtp.Credentials = new NetworkCredential("rpynodhelp@gmail.com", "rpynod123");
+                smtp.EnableSsl = true;
 
-        #endregion
+                smtp.Send(m);
+
+                return true;
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e.Message);
+                return false;
+            }
+        }
+       #endregion
     }
 }

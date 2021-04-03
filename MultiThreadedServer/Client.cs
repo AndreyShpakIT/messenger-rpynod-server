@@ -16,4 +16,20 @@
                 string.IsNullOrEmpty(Key) ? "?" : Key);
         }
     }
+
+    struct ResetingClient
+    {
+        public string Username { get; set; }
+        public string Id { get; set; }
+        public string Email { get; set; }
+        public string Code { get; set; }
+
+        public ResetingClient(string username, string email, string id, string code)
+        {
+            Username = username;
+            Email = email;
+            Id = id;
+            Code = code;
+        }
+    }
 }

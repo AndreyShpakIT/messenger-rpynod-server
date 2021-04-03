@@ -11,6 +11,7 @@ namespace MultiThreadedServer
         private SQLiteConnection dbConnector;
         private SQLiteCommand dbCommand;
 
+        public int CountHandledRows { get; set; }
         public string DbFileName { get; } = "DataBase.db";
 
         public SqlResultTable ExecuteQuery(string query)
@@ -21,6 +22,7 @@ namespace MultiThreadedServer
 
             if (query.ToLower().Contains("select"))
             {
+                CountHandledRows = -1;
                 SQLiteDataReader r = dbCommand.ExecuteReader();
 
                 if (r.HasRows)
@@ -50,7 +52,7 @@ namespace MultiThreadedServer
             }
             else
             {
-                dbCommand.ExecuteNonQuery();
+                CountHandledRows = dbCommand.ExecuteNonQuery();
             }
             return table;
         }
